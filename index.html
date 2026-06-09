@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>手機光譜儀 - 加強版</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            margin: 0; padding: 16px;
+            font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0a0f1e; color: #eef4ff;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 720px; width: 100%; margin: 0 auto;
+            background: #111827; border-radius: 2rem; padding: 1rem;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.5);
+        }
+        h1 {
+            font-size: 1.55rem; font-weight: 700; text-align: center;
+            margin: 0 0 0.25rem 0; letter-spacing: -0.3px;
+            background: linear-gradient(135deg, #c084fc, #60a5fa);
+            background-clip: text; -webkit-background-clip: text; color: transparent;
+        }
+        .sub { text-align: center; font-size: 0.72rem; color: #9ca3af; margin-bottom: 1rem; border-bottom: 1px solid #1f2937; padding-bottom: 0.5rem; }
+        .video-container { position: relative; background: #000; border-radius: 1.5rem; overflow: hidden; margin-bottom: 1rem; box-shadow: 0 8px 20px rgba(0,0,0,0.3); aspect-ratio: 4 / 3; }
+        video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(1); }
+        .roi-indicator { position: absolute; top: 40%; left: 0; width: 100%; height: 20%; border: 2px solid #facc15; box-shadow: 0 0 0 2px rgba(0,0,0,0.5); background: rgba(250,204,21,0.1); pointer-events: none; z-index: 5; }
+        .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; justify-content: center; }
+        button { background: #1e293b; border: none; padding: 8px 16px; border-radius: 40px; font-weight: 650; font-size: 0.82rem; color: #f1f5f9; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s ease; cursor: pointer; flex: 0 0 auto; }
+        button:active { transform: scale(0.96); background: #334155; }
+        button:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-primary { background: #3b82f6; color: white; box-shadow: 0 4px 12px rgba(59,130,246,0.35); }
+        .btn-warning { background: #f97316; color: #111827; }
+        .btn-danger { background: #dc2626; }
+        .btn-green { background: #16a34a; }
+        .panel { background: #1e293b; border-radius: 1.2rem; padding: 12px; margin: 10px 0; border: 1px solid #334155; }
+        .panel-title { font-weight: 700; font-size: 0.92rem; display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; align-items: center; }
+        .cal-points, .peak-list { background: #0f172a; border-radius: 1rem; padding: 8px; max-height: 128px; overflow-y: auto; font-size: 0.75rem; }
+        .point-item, .peak-item { display: flex; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid #2d3a5e; gap: 8px; align-items: center; }
+        .point-item span, .peak-item span { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 500; }
+        .del-point { background: #4b5563; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; cursor: pointer; }
+        .spectrum-container { background: #030712; border-radius: 1.2rem; padding: 8px; margin-top: 8px; }
+        canvas#spectrumCanvas { width: 100%; background: #0f172a; border-radius: 1rem; display: block; margin-top: 6px; cursor: default; }
+        .info-text { font-size: 0.72rem; color: #9ca3af; text-align: center; margin-top: 8px; line-height: 1.45; }
+        .legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; font-size: 0.65rem; margin-top: 6px; }
+        .badge { background: #2d3a5e; padding: 2px 8px; border-radius: 30px; white-space: nowrap; }
+        select, input { background: #0f172a; border: 1px solid #3b4a6b; color: white; border-radius: 28px; padding: 6px 10px; font-size: 0.75rem; min-width: 70px; }
+        input[type="number"] { width: 82px; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .control-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #0f172a; border-radius: 1rem; padding: 8px; font-size: 0.74rem; color: #cbd5e1; }
+        .status-line { font-size: 0.7rem; color: #cbd5e1; padding: 6px 8px; background: #0f172a; border-radius: 1rem; line-height: 1.35; }
+        .ok { color: #86efac; } .warn { color: #facc15; } .bad { color: #fca5a5; }
+        @media (max-width: 560px) { .container { padding: 0.8rem; } button { padding: 7px 12px; font-size: 0.74rem; } .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>✨ 手機光柵光譜儀 · 加強版 ✨</h1>
+    <div class="sub">後置鏡頭 · ROI 光譜提取 · 波長校準 · 暗場/背景扣除 · 峰值分析 · CSV 輸出</div>
+
+    <div class="video-container" id="videoWrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="roi-indicator"></div>
+    </div>
+
+    <div class="controls">
+        <button id="startCamBtn" class="btn-primary">📷 啟動後置鏡頭</button>
+        <button id="lockCameraBtn" class="btn-green" disabled>🔒 鎖定曝光/白平衡</button>
+        <button id="autoCameraBtn" disabled>🔁 恢復自動相機</button>
+        <button id="calibrateModeBtn" class="btn-warning">⚡ 校準模式 OFF</button>
+        <button id="resetCalibrationBtn" class="btn-danger">🗑️ 重置校準</button>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title"><span>📷 相機控制</span><span id="cameraStatusBadge" class="badge">未啟動</span></div>
+        <div class="grid">
+            <div class="control-row"><span>曝光模式</span><span id="exposureStatus">未知</span></div>
+            <div class="control-row"><span>白平衡模式</span><span id="wbStatus">未知</span></div>
+            <div class="control-row"><span>建議</span><span>先對準光譜，再鎖定</span></div>
+            <div class="control-row"><span>支援度</span><span id="capabilityStatus">等待檢測</span></div>
+        </div>
+        <div class="info-text">瀏覽器對「鎖曝光/鎖白平衡」支援不完全；若手機不支援，程式會盡量鎖定可用參數，並提示你手動使用專業相機模式或固定光源。</div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title"><span>🧪 暗場與背景扣除</span><span id="correctionBadge" class="badge">未扣除</span></div>
+        <div class="controls">
+            <button id="captureDarkBtn" disabled>🌑 擷取暗場</button>
+            <button id="captureBackgroundBtn" disabled>🟫 擷取背景</button>
+            <button id="clearCorrectionsBtn" class="btn-danger">清除扣除</button>
+        </div>
+        <div class="grid">
+            <div class="control-row"><span>暗場</span><span id="darkStatus">未擷取</span></div>
+            <div class="control-row"><span>背景</span><span id="bgStatus">未擷取</span></div>
+        </div>
+        <div class="info-text">暗場：遮住入光狹縫/鏡頭後擷取，用來扣除感光器底噪。背景：保留同樣環境但移走待測光源/樣品後擷取，用來扣除環境雜光。</div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title"><span>🔧 波長校準點</span><span style="font-size:0.7rem;">開啟校準模式後點擊光譜曲線</span></div>
+        <div id="calPointsList" class="cal-points">
+            <div style="color:#6b7280; text-align:center;">暫無校準點</div>
+        </div>
+        <div class="info-text">建議用已知譜線：綠雷射 532 nm、汞燈 435.8 / 546.1 nm、鈉燈約 589 nm、紅雷射約 650 nm。至少 2 點；3 點以上會用二次擬合。</div>
+    </div>
+
+    <div class="spectrum-container">
+        <div class="flex-between">
+            <span>🌈 光譜強度曲線</span>
+            <span id="calStatusBadge" class="badge">⚪ 未校準</span>
+        </div>
+        <canvas id="spectrumCanvas" width="900" height="260"></canvas>
+        <div class="legend">
+            <span>🔆 已校正相對強度</span>
+            <span>📏 波長 / 像素位置</span>
+            <span>📍 自動標峰</span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title"><span>📍 峰值自動尋找</span><span id="peakBadge" class="badge">未分析</span></div>
+        <div class="grid">
+            <div class="control-row"><span>靈敏度</span><input id="peakThresholdInput" type="number" min="1" max="100" value="20">%</div>
+            <div class="control-row"><span>最小間距</span><input id="peakDistanceInput" type="number" min="1" max="200" value="12"> px</div>
+        </div>
+        <div class="controls">
+            <button id="findPeaksBtn" disabled>🔎 尋找峰值</button>
+            <button id="exportCsvBtn" disabled>⬇️ 匯出 CSV</button>
+        </div>
+        <div id="peakList" class="peak-list"><div style="color:#6b7280; text-align:center;">尚未尋找峰值</div></div>
+    </div>
+
+    <div class="info-text">
+        使用：光源 → 狹縫 → 光柵 → 手機鏡頭；使一階光譜水平落在黃色 ROI 內。先校準波長，再做暗場/背景扣除、找峰與匯出。
+    </div>
+</div>
+
+<script>
+(function(){
+    const video = document.getElementById('video');
+    const startBtn = document.getElementById('startCamBtn');
+    const lockCameraBtn = document.getElementById('lockCameraBtn');
+    const autoCameraBtn = document.getElementById('autoCameraBtn');
+    const calibrateModeBtn = document.getElementById('calibrateModeBtn');
+    const resetCalibrationBtn = document.getElementById('resetCalibrationBtn');
+    const captureDarkBtn = document.getElementById('captureDarkBtn');
+    const captureBackgroundBtn = document.getElementById('captureBackgroundBtn');
+    const clearCorrectionsBtn = document.getElementById('clearCorrectionsBtn');
+    const findPeaksBtn = document.getElementById('findPeaksBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const spectrumCanvas = document.getElementById('spectrumCanvas');
+    const ctxSpectrum = spectrumCanvas.getContext('2d');
+    const calPointsListDiv = document.getElementById('calPointsList');
+    const peakListDiv = document.getElementById('peakList');
+    const calStatusBadge = document.getElementById('calStatusBadge');
+    const cameraStatusBadge = document.getElementById('cameraStatusBadge');
+    const correctionBadge = document.getElementById('correctionBadge');
+    const peakBadge = document.getElementById('peakBadge');
+    const exposureStatus = document.getElementById('exposureStatus');
+    const wbStatus = document.getElementById('wbStatus');
+    const capabilityStatus = document.getElementById('capabilityStatus');
+    const darkStatus = document.getElementById('darkStatus');
+    const bgStatus = document.getElementById('bgStatus');
+    const peakThresholdInput = document.getElementById('peakThresholdInput');
+    const peakDistanceInput = document.getElementById('peakDistanceInput');
+
+    let stream = null;
+    let activeTrack = null;
+    let imageCapture = null;
+    let isCameraReady = false;
+    let animationId = null;
+    let rawProfile = [];
+    let correctedProfile = [];
+    let roiWidth = 0;
+    let darkProfile = null;
+    let backgroundProfile = null;
+    let peaks = [];
+    let calibrationPoints = [];
+    let isCalibrationMode = false;
+    let calibrated = false;
+    let polyCoeffs = { a: 0, b: 1, c: 0 };
+    let useQuadratic = false;
+
+    const ROI_HEIGHT_RATIO = 0.2;
+    const ROI_VERTICAL_POS = 0.4;
+    const captureCanvas = document.createElement('canvas');
+    const captureCtx = captureCanvas.getContext('2d', { willReadFrequently: true });
+
+    function setText(el, text, cls) {
+        el.textContent = text;
+        if (cls) el.className = cls;
+    }
+
+    function sameLengthProfile(profile, targetLength) {
+        if (!profile || profile.length === 0) return null;
+        if (profile.length === targetLength) return profile;
+        const out = new Array(targetLength).fill(0);
+        for (let i = 0; i < targetLength; i++) {
+            const pos = i * (profile.length - 1) / Math.max(1, targetLength - 1);
+            const i1 = Math.floor(pos);
+            const i2 = Math.min(i1 + 1, profile.length - 1);
+            const f = pos - i1;
+            out[i] = profile[i1] * (1 - f) + profile[i2] * f;
+        }
+        return out;
+    }
+
+    function applyCorrections(profile) {
+        const out = profile.slice();
+        const dark = sameLengthProfile(darkProfile, out.length);
+        const bg = sameLengthProfile(backgroundProfile, out.length);
+        for (let i = 0; i < out.length; i++) {
+            let v = out[i];
+            if (dark) v -= dark[i];
+            if (bg) {
+                // 背景通常也含暗電流；若已扣暗場，背景需先扣暗場，避免重複扣底噪。
+                let bgVal = bg[i];
+                if (dark) bgVal -= dark[i];
+                v -= bgVal;
+            }
+            out[i] = Math.max(0, v);
+        }
+        return out;
+    }
+
+    function updateCorrectionUI() {
+        darkStatus.textContent = darkProfile ? `已擷取 ${darkProfile.length} px` : '未擷取';
+        bgStatus.textContent = backgroundProfile ? `已擷取 ${backgroundProfile.length} px` : '未擷取';
+        const parts = [];
+        if (darkProfile) parts.push('暗場');
+        if (backgroundProfile) parts.push('背景');
+        correctionBadge.textContent = parts.length ? `已扣除：${parts.join(' + ')}` : '未扣除';
+    }
+
+    function updateCalPointsUI() {
+        if(calibrationPoints.length === 0) {
+            calPointsListDiv.innerHTML = '<div style="color:#6b7280; text-align:center;">暫無校準點<br>點擊峰位後輸入標準波長 nm</div>';
+            calStatusBadge.textContent = '⚪ 未校準：像素坐標';
+            calibrated = false;
+            return;
+        }
+        calPointsListDiv.innerHTML = calibrationPoints.map((pt, idx) => `
+            <div class="point-item">
+                <span>像素 ${Math.round(pt.pixelX)} → ${pt.wavelengthNm} nm</span>
+                <span class="del-point" data-idx="${idx}">刪除</span>
+            </div>`).join('');
+        document.querySelectorAll('.del-point').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(el.getAttribute('data-idx'));
+                calibrationPoints.splice(idx, 1);
+                if (calibrationPoints.length >= 2) computeCalibrationPolynomial();
+                else calibrated = false;
+                updateCalPointsUI();
+                renderSpectrumWithCurrentProfile();
+            });
+        });
+        if(calibrationPoints.length >= 2) {
+            computeCalibrationPolynomial();
+            calStatusBadge.textContent = calibrated ? (useQuadratic ? '✅ 已校準：二次擬合' : '✅ 已校準：線性擬合') : '⚠️ 校準失敗';
+        } else {
+            calStatusBadge.textContent = '⚠️ 需 ≥ 2 個校準點';
+            calibrated = false;
+        }
+    }
+
+    function computeCalibrationPolynomial() {
+        if(calibrationPoints.length < 2) { calibrated = false; return; }
+        const n = calibrationPoints.length;
+        if(n === 2) {
+            const [p1, p2] = calibrationPoints;
+            const dx = p2.pixelX - p1.pixelX;
+            if(Math.abs(dx) < 1e-6) { calibrated = false; return; }
+            polyCoeffs = { a: 0, b: (p2.wavelengthNm - p1.wavelengthNm) / dx, c: p1.wavelengthNm - ((p2.wavelengthNm - p1.wavelengthNm) / dx) * p1.pixelX };
+            useQuadratic = false; calibrated = true; return;
+        }
+        let sumX=0,sumX2=0,sumX3=0,sumX4=0,sumY=0,sumXY=0,sumX2Y=0;
+        for(const pt of calibrationPoints) {
+            const x=pt.pixelX, y=pt.wavelengthNm;
+            sumX+=x; sumX2+=x*x; sumX3+=x*x*x; sumX4+=x*x*x*x;
+            sumY+=y; sumXY+=x*y; sumX2Y+=x*x*y;
+        }
+        const det = n*(sumX2*sumX4-sumX3*sumX3) - sumX*(sumX*sumX4-sumX3*sumX2) + sumX2*(sumX*sumX3-sumX2*sumX2);
+        if(Math.abs(det) < 1e-6) {
+            const [p1, p2] = calibrationPoints;
+            const slope = (p2.wavelengthNm-p1.wavelengthNm)/(p2.pixelX-p1.pixelX);
+            polyCoeffs = { a:0, b:slope, c:p1.wavelengthNm-slope*p1.pixelX };
+            useQuadratic = false; calibrated = true; return;
+        }
+        const a = (sumY*(sumX2*sumX4-sumX3*sumX3) - sumX*(sumXY*sumX4-sumX3*sumX2Y) + sumX2*(sumXY*sumX3-sumX2*sumX2Y)) / det;
+        const b = (n*(sumXY*sumX4-sumX3*sumX2Y) - sumY*(sumX*sumX4-sumX3*sumX2) + sumX2*(sumX*sumX2Y-sumXY*sumX2)) / det;
+        const c = (n*(sumX2*sumX2Y-sumXY*sumX3) - sumX*(sumX*sumX2Y-sumXY*sumX2) + sumY*(sumX*sumX3-sumX2*sumX2)) / det;
+        polyCoeffs = { a, b, c }; useQuadratic = true; calibrated = true;
+    }
+
+    function pixelToWavelength(pixelX) {
+        if(!calibrated) return pixelX;
+        return polyCoeffs.a * pixelX * pixelX + polyCoeffs.b * pixelX + polyCoeffs.c;
+    }
+
+    function wavelengthToPixel(wl) {
+        if(!calibrated) return wl;
+        if(useQuadratic && Math.abs(polyCoeffs.a) > 1e-9) {
+            const a = polyCoeffs.a, b = polyCoeffs.b, c = polyCoeffs.c - wl;
+            const delta = b*b - 4*a*c;
+            if(delta < 0) return -1;
+            const r1 = (-b - Math.sqrt(delta))/(2*a);
+            const r2 = (-b + Math.sqrt(delta))/(2*a);
+            if(r1 >= 0 && r1 <= roiWidth) return r1;
+            if(r2 >= 0 && r2 <= roiWidth) return r2;
+            return -1;
+        }
+        if(Math.abs(polyCoeffs.b) < 1e-9) return -1;
+        return (wl - polyCoeffs.c) / polyCoeffs.b;
+    }
+
+    function getPlotData() {
+        const profile = correctedProfile.length ? correctedProfile : rawProfile;
+        if (!profile || !profile.length) return null;
+        if(!calibrated) {
+            return profile.map((intensity, pixel) => ({ pixel, wavelength: null, intensity }));
+        }
+        return profile.map((intensity, pixel) => ({ pixel, wavelength: pixelToWavelength(pixel), intensity }));
+    }
+
+    function renderSpectrumWithCurrentProfile() {
+        const profile = correctedProfile.length ? correctedProfile : rawProfile;
+        const w = spectrumCanvas.width, h = spectrumCanvas.height;
+        ctxSpectrum.clearRect(0,0,w,h);
+        ctxSpectrum.fillStyle = '#030712'; ctxSpectrum.fillRect(0,0,w,h);
+        if(!profile || profile.length === 0) {
+            ctxSpectrum.fillStyle = '#9ca3af'; ctxSpectrum.font = '14px system-ui';
+            ctxSpectrum.fillText('等待光譜數據...', 28, 130); return;
+        }
+        const bottomY = h - 26;
+        const leftPad = 8;
+        const maxIntensity = Math.max(...profile, 1);
+        const scaleY = (h - 48) / maxIntensity;
+        const stepX = (w - 16) / Math.max(1, profile.length - 1);
+
+        ctxSpectrum.strokeStyle = '#334155'; ctxSpectrum.lineWidth = 0.6;
+        for(let gx=0; gx<=10; gx++) {
+            const x = leftPad + gx*(w-16)/10;
+            ctxSpectrum.beginPath(); ctxSpectrum.moveTo(x, 8); ctxSpectrum.lineTo(x, bottomY); ctxSpectrum.stroke();
+        }
+        for(let gy=0; gy<=4; gy++) {
+            const y = 8 + gy*(bottomY-8)/4;
+            ctxSpectrum.beginPath(); ctxSpectrum.moveTo(leftPad, y); ctxSpectrum.lineTo(w-8, y); ctxSpectrum.stroke();
+        }
+
+        ctxSpectrum.beginPath(); ctxSpectrum.strokeStyle = calibrated ? '#60a5fa' : '#facc15'; ctxSpectrum.lineWidth = 2.2;
+        for(let i=0; i<profile.length; i++) {
+            const x = leftPad + i * stepX;
+            const y = bottomY - profile[i] * scaleY;
+            if(i === 0) ctxSpectrum.moveTo(x, y); else ctxSpectrum.lineTo(x, y);
+        }
+        ctxSpectrum.stroke();
+
+        ctxSpectrum.fillStyle = calibrated ? 'rgba(96,165,250,0.16)' : 'rgba(250,204,21,0.14)';
+        ctxSpectrum.beginPath(); ctxSpectrum.moveTo(leftPad, bottomY);
+        for(let i=0; i<profile.length; i++) ctxSpectrum.lineTo(leftPad + i*stepX, bottomY - profile[i]*scaleY);
+        ctxSpectrum.lineTo(w-8, bottomY); ctxSpectrum.fill();
+
+        ctxSpectrum.fillStyle = '#cbd5e1'; ctxSpectrum.font = '10px ui-monospace, monospace';
+        if(calibrated) {
+            let wls = [0, Math.floor(profile.length/4), Math.floor(profile.length/2), Math.floor(profile.length*3/4), profile.length-1].map(pixelToWavelength);
+            [0,0.25,0.5,0.75,1].forEach((f, idx) => {
+                const x = leftPad + f*(w-16);
+                ctxSpectrum.fillText(`${Math.round(wls[idx])} nm`, Math.max(4, x-18), h-7);
+            });
+        } else {
+            ctxSpectrum.fillText('像素 0', 4, h-7);
+            ctxSpectrum.fillText(`像素 ${profile.length-1}`, w-72, h-7);
+        }
+        ctxSpectrum.fillText(`max=${maxIntensity.toFixed(1)}`, 12, 18);
+
+        // 校準點線
+        calibrationPoints.forEach(p => {
+            const x = leftPad + p.pixelX / Math.max(1, profile.length-1) * (w-16);
+            ctxSpectrum.strokeStyle = '#fb923c'; ctxSpectrum.lineWidth = 1;
+            ctxSpectrum.beginPath(); ctxSpectrum.moveTo(x, 8); ctxSpectrum.lineTo(x, bottomY); ctxSpectrum.stroke();
+            ctxSpectrum.fillStyle = '#fed7aa'; ctxSpectrum.fillText(`${p.wavelengthNm}nm`, x+3, 32);
+        });
+
+        // 峰值標示
+        peaks.forEach(pk => {
+            const x = leftPad + pk.pixel / Math.max(1, profile.length-1) * (w-16);
+            const y = bottomY - pk.intensity * scaleY;
+            ctxSpectrum.strokeStyle = '#f43f5e'; ctxSpectrum.lineWidth = 1.2;
+            ctxSpectrum.beginPath(); ctxSpectrum.moveTo(x, y-10); ctxSpectrum.lineTo(x, bottomY); ctxSpectrum.stroke();
+            ctxSpectrum.fillStyle = '#fecdd3'; ctxSpectrum.font = 'bold 10px ui-monospace, monospace';
+            const label = calibrated ? `${Math.round(pk.wavelength)}nm` : `px ${pk.pixel}`;
+            ctxSpectrum.fillText(label, Math.min(w-58, x+4), Math.max(18, y-12));
+        });
+    }
+
+    function captureSpectrumFromVideo() {
+        if(!isCameraReady || !video.videoWidth || !video.videoHeight) return false;
+        const displayWidth = video.clientWidth;
+        const displayHeight = video.clientHeight;
+        if(displayWidth === 0 || displayHeight === 0) return false;
+        captureCanvas.width = displayWidth;
+        captureCanvas.height = displayHeight;
+        captureCtx.drawImage(video, 0, 0, displayWidth, displayHeight);
+        const roiYStart = Math.floor(displayHeight * ROI_VERTICAL_POS);
+        const roiHeight = Math.max(1, Math.floor(displayHeight * ROI_HEIGHT_RATIO));
+        const imgData = captureCtx.getImageData(0, roiYStart, displayWidth, roiHeight);
+        const data = imgData.data;
+        const profile = new Array(displayWidth).fill(0);
+        for(let x=0; x<displayWidth; x++) {
+            let sum = 0;
+            for(let y=0; y<roiHeight; y++) {
+                const idx = (y * displayWidth + x) * 4;
+                const r = data[idx], g = data[idx+1], b = data[idx+2];
+                sum += 0.299*r + 0.587*g + 0.114*b;
+            }
+            profile[x] = sum / roiHeight;
+        }
+        rawProfile = profile;
+        correctedProfile = applyCorrections(profile);
+        roiWidth = displayWidth;
+        renderSpectrumWithCurrentProfile();
+        exportCsvBtn.disabled = false;
+        findPeaksBtn.disabled = false;
+        return true;
+    }
+
+    let lastCaptureTime = 0;
+    function analysisLoop(timestamp) {
+        if(isCameraReady && video.srcObject && (!lastCaptureTime || timestamp - lastCaptureTime > 80)) {
+            captureSpectrumFromVideo();
+            lastCaptureTime = timestamp;
+        }
+        animationId = requestAnimationFrame(analysisLoop);
+    }
+
+    async function startCamera() {
+        if(stream) stream.getTracks().forEach(track => track.stop());
+        try {
+            const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            await video.play();
+            activeTrack = stream.getVideoTracks()[0];
+            if ('ImageCapture' in window) {
+                try { imageCapture = new ImageCapture(activeTrack); } catch(e) { imageCapture = null; }
+            }
+            isCameraReady = true;
+            lockCameraBtn.disabled = false; autoCameraBtn.disabled = false; captureDarkBtn.disabled = false; captureBackgroundBtn.disabled = false;
+            cameraStatusBadge.textContent = '已啟動';
+            inspectCameraCapabilities();
+            if(animationId) cancelAnimationFrame(animationId);
+            animationId = requestAnimationFrame(analysisLoop);
+        } catch(err) {
+            console.error(err);
+            alert('無法開啟後置攝像頭。請檢查瀏覽器權限，並用 HTTPS 或本機 localhost 開啟。');
+            cameraStatusBadge.textContent = '啟動失敗';
+        }
+    }
+
+    function inspectCameraCapabilities() {
+        if(!activeTrack) return;
+        const caps = activeTrack.getCapabilities ? activeTrack.getCapabilities() : {};
+        const settings = activeTrack.getSettings ? activeTrack.getSettings() : {};
+        const supports = [];
+        if(caps.exposureMode) supports.push('exposureMode');
+        if(caps.whiteBalanceMode) supports.push('whiteBalanceMode');
+        if(caps.exposureTime) supports.push('exposureTime');
+        if(caps.colorTemperature) supports.push('colorTemperature');
+        capabilityStatus.innerHTML = supports.length ? `<span class="ok">${supports.join(', ')}</span>` : '<span class="warn">瀏覽器未暴露手動控制</span>';
+        exposureStatus.textContent = settings.exposureMode || settings.exposureTime || 'auto/未知';
+        wbStatus.textContent = settings.whiteBalanceMode || settings.colorTemperature || 'auto/未知';
+    }
+
+    async function lockCameraControls() {
+        if(!activeTrack) return;
+        const caps = activeTrack.getCapabilities ? activeTrack.getCapabilities() : {};
+        const settings = activeTrack.getSettings ? activeTrack.getSettings() : {};
+        const advanced = [];
+        if(caps.exposureMode && caps.exposureMode.includes('manual')) advanced.push({ exposureMode: 'manual' });
+        if(caps.whiteBalanceMode && caps.whiteBalanceMode.includes('manual')) advanced.push({ whiteBalanceMode: 'manual' });
+        if(caps.exposureTime && typeof settings.exposureTime === 'number') advanced.push({ exposureTime: settings.exposureTime });
+        if(caps.colorTemperature && typeof settings.colorTemperature === 'number') advanced.push({ colorTemperature: settings.colorTemperature });
+        try {
+            if(advanced.length) await activeTrack.applyConstraints({ advanced });
+            cameraStatusBadge.textContent = advanced.length ? '已嘗試鎖定' : '不支援鎖定';
+            inspectCameraCapabilities();
+            alert(advanced.length ? '已嘗試鎖定曝光與白平衡。不同手機/瀏覽器支援度不同，請觀察光譜是否穩定。' : '此瀏覽器未提供曝光/白平衡鎖定 API。可用手機專業模式或固定光源作替代。');
+        } catch(err) {
+            console.warn(err);
+            cameraStatusBadge.textContent = '鎖定失敗';
+            alert('嘗試鎖定失敗：瀏覽器或相機不支援此控制。');
+        }
+    }
+
+    async function restoreAutoCameraControls() {
+        if(!activeTrack) return;
+        const caps = activeTrack.getCapabilities ? activeTrack.getCapabilities() : {};
+        const advanced = [];
+        if(caps.exposureMode && caps.exposureMode.includes('continuous')) advanced.push({ exposureMode: 'continuous' });
+        else if(caps.exposureMode && caps.exposureMode.includes('auto')) advanced.push({ exposureMode: 'auto' });
+        if(caps.whiteBalanceMode && caps.whiteBalanceMode.includes('continuous')) advanced.push({ whiteBalanceMode: 'continuous' });
+        else if(caps.whiteBalanceMode && caps.whiteBalanceMode.includes('auto')) advanced.push({ whiteBalanceMode: 'auto' });
+        try {
+            if(advanced.length) await activeTrack.applyConstraints({ advanced });
+            cameraStatusBadge.textContent = '自動模式';
+            inspectCameraCapabilities();
+        } catch(err) {
+            console.warn(err);
+            alert('恢復自動模式失敗，可能是瀏覽器不支援。');
+        }
+    }
+
+    function captureAverageProfile(frames = 8) {
+        const profiles = [];
+        for(let i=0; i<frames; i++) {
+            captureSpectrumFromVideo();
+            if(rawProfile.length) profiles.push(rawProfile.slice());
+        }
+        if(!profiles.length) return null;
+        const len = profiles[0].length;
+        const avg = new Array(len).fill(0);
+        profiles.forEach(p => { for(let i=0;i<len;i++) avg[i]+=p[i]; });
+        for(let i=0;i<len;i++) avg[i] /= profiles.length;
+        return avg;
+    }
+
+    function captureDark() {
+        const p = captureAverageProfile(10);
+        if(!p) return;
+        darkProfile = p;
+        updateCorrectionUI();
+        if(rawProfile.length) correctedProfile = applyCorrections(rawProfile);
+        peaks = [];
+        renderSpectrumWithCurrentProfile();
+    }
+
+    function captureBackground() {
+        const p = captureAverageProfile(10);
+        if(!p) return;
+        backgroundProfile = p;
+        updateCorrectionUI();
+        if(rawProfile.length) correctedProfile = applyCorrections(rawProfile);
+        peaks = [];
+        renderSpectrumWithCurrentProfile();
+    }
+
+    function clearCorrections() {
+        darkProfile = null; backgroundProfile = null; updateCorrectionUI();
+        if(rawProfile.length) correctedProfile = applyCorrections(rawProfile);
+        peaks = []; renderSpectrumWithCurrentProfile();
+    }
+
+    function smoothProfile(profile, halfWindow = 2) {
+        const out = new Array(profile.length).fill(0);
+        for(let i=0;i<profile.length;i++) {
+            let sum=0,count=0;
+            for(let k=-halfWindow;k<=halfWindow;k++) {
+                const j=i+k; if(j>=0 && j<profile.length) { sum += profile[j]; count++; }
+            }
+            out[i] = sum / count;
+        }
+        return out;
+    }
+
+    function findPeaks() {
+        const profile = correctedProfile.length ? correctedProfile : rawProfile;
+        if(!profile.length) return;
+        const thresholdRatio = Math.max(1, Math.min(100, parseFloat(peakThresholdInput.value) || 20)) / 100;
+        const minDistance = Math.max(1, parseInt(peakDistanceInput.value) || 12);
+        const smooth = smoothProfile(profile, 2);
+        const maxV = Math.max(...smooth, 1);
+        const threshold = maxV * thresholdRatio;
+        let candidates = [];
+        for(let i=1;i<smooth.length-1;i++) {
+            if(smooth[i] >= threshold && smooth[i] > smooth[i-1] && smooth[i] >= smooth[i+1]) {
+                candidates.push({ pixel:i, intensity:smooth[i], wavelength: calibrated ? pixelToWavelength(i) : null });
+            }
+        }
+        candidates.sort((a,b)=>b.intensity-a.intensity);
+        const chosen = [];
+        for(const c of candidates) {
+            if(chosen.every(p => Math.abs(p.pixel - c.pixel) >= minDistance)) chosen.push(c);
+        }
+        chosen.sort((a,b)=>a.pixel-b.pixel);
+        peaks = chosen.slice(0, 20);
+        peakBadge.textContent = `找到 ${peaks.length} 個峰`;
+        if(!peaks.length) {
+            peakListDiv.innerHTML = '<div style="color:#6b7280; text-align:center;">未找到明顯峰值；可降低靈敏度百分比或改善狹縫/對焦。</div>';
+        } else {
+            peakListDiv.innerHTML = peaks.map((p, idx) => `
+                <div class="peak-item">
+                    <span>#${idx+1}　${calibrated ? Math.round(p.wavelength*10)/10 + ' nm' : 'pixel ' + p.pixel}</span>
+                    <span>I=${p.intensity.toFixed(1)}</span>
+                </div>`).join('');
+        }
+        renderSpectrumWithCurrentProfile();
+    }
+
+    function exportCSV() {
+        const data = getPlotData();
+        if(!data || !data.length) { alert('沒有可輸出的光譜數據'); return; }
+        const peakPixels = new Set(peaks.map(p => p.pixel));
+        const lines = [];
+        lines.push('pixel,wavelength_nm,raw_intensity,corrected_intensity,is_peak');
+        const dark = sameLengthProfile(darkProfile, rawProfile.length);
+        const bg = sameLengthProfile(backgroundProfile, rawProfile.length);
+        for(let i=0;i<rawProfile.length;i++) {
+            const wl = calibrated ? pixelToWavelength(i).toFixed(3) : '';
+            const raw = rawProfile[i] ?? '';
+            const corr = correctedProfile[i] ?? raw;
+            lines.push(`${i},${wl},${Number(raw).toFixed(4)},${Number(corr).toFixed(4)},${peakPixels.has(i) ? 1 : 0}`);
+        }
+        lines.push('');
+        lines.push('# calibration_points_pixel,wavelength_nm');
+        calibrationPoints.forEach(p => lines.push(`# ${p.pixelX},${p.wavelengthNm}`));
+        lines.push(`# dark_correction,${darkProfile ? 'yes' : 'no'}`);
+        lines.push(`# background_correction,${backgroundProfile ? 'yes' : 'no'}`);
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const ts = new Date().toISOString().replace(/[:.]/g,'-');
+        a.href = url; a.download = `spectrum_${ts}.csv`;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function resetCalibration() {
+        calibrationPoints = []; calibrated = false; useQuadratic = false; polyCoeffs = { a:0, b:1, c:0 };
+        peaks = []; peakBadge.textContent = '未分析';
+        peakListDiv.innerHTML = '<div style="color:#6b7280; text-align:center;">尚未尋找峰值</div>';
+        updateCalPointsUI(); renderSpectrumWithCurrentProfile();
+    }
+
+    function handleSpectrumClick(e) {
+        if(!isCalibrationMode) return;
+        const profile = correctedProfile.length ? correctedProfile : rawProfile;
+        if(!profile.length) return;
+        const rect = spectrumCanvas.getBoundingClientRect();
+        const clickX = Math.min(Math.max(0, (e.clientX - rect.left) * spectrumCanvas.width / rect.width), spectrumCanvas.width);
+        const pixelIndex = Math.round((clickX / spectrumCanvas.width) * (profile.length - 1));
+        const guess = calibrationPoints.length ? '' : '546.1';
+        const wavelengthInput = prompt(`校準點：像素位置 ${pixelIndex}\n請輸入此譜線真實波長 (nm)`, guess);
+        if(wavelengthInput !== null && !isNaN(parseFloat(wavelengthInput))) {
+            calibrationPoints.push({ pixelX: pixelIndex, wavelengthNm: parseFloat(wavelengthInput) });
+            calibrationPoints.sort((a,b)=>a.pixelX-b.pixelX);
+            updateCalPointsUI(); renderSpectrumWithCurrentProfile();
+        } else if(wavelengthInput !== null) alert('請輸入有效數字波長');
+    }
+
+    function toggleCalibrationMode() {
+        isCalibrationMode = !isCalibrationMode;
+        calibrateModeBtn.textContent = isCalibrationMode ? '🔴 校準模式 ON' : '⚡ 校準模式 OFF';
+        calibrateModeBtn.style.background = isCalibrationMode ? '#f97316' : '#1e293b';
+        spectrumCanvas.style.cursor = isCalibrationMode ? 'crosshair' : 'default';
+    }
+
+    startBtn.addEventListener('click', startCamera);
+    lockCameraBtn.addEventListener('click', lockCameraControls);
+    autoCameraBtn.addEventListener('click', restoreAutoCameraControls);
+    calibrateModeBtn.addEventListener('click', toggleCalibrationMode);
+    resetCalibrationBtn.addEventListener('click', resetCalibration);
+    captureDarkBtn.addEventListener('click', captureDark);
+    captureBackgroundBtn.addEventListener('click', captureBackground);
+    clearCorrectionsBtn.addEventListener('click', clearCorrections);
+    findPeaksBtn.addEventListener('click', findPeaks);
+    exportCsvBtn.addEventListener('click', exportCSV);
+    spectrumCanvas.addEventListener('click', handleSpectrumClick);
+
+    updateCalPointsUI(); updateCorrectionUI();
+    ctxSpectrum.fillStyle = '#0f172a'; ctxSpectrum.fillRect(0,0,spectrumCanvas.width,spectrumCanvas.height);
+    ctxSpectrum.fillStyle = '#9ca3af'; ctxSpectrum.font = '14px system-ui';
+    ctxSpectrum.fillText('啟動攝像頭並放置光柵，光譜將顯示在此', 30, 130);
+})();
+</script>
+</body>
+</html>
